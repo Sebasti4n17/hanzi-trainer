@@ -14,6 +14,7 @@ export async function GET() {
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
+    console.error(error)
     return new Response(JSON.stringify({ error: "Error obteniendo los resultados" }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
