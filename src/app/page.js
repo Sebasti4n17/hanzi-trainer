@@ -190,7 +190,7 @@ export default function Home() {
               <div className="grid grid-cols-2 gap-4 mt-4">
                 {/* Columna de respuestas correctas */}
                 <div>
-                  <h4 className="text-lg font-semibold text-green-600 text-center">✅ Correctas</h4>
+                  <h4 className="text-lg font-semibold text-green-600 text-center">✅ Correctas</h4>{feedback}
                   <div className="flex flex-col items-center space-y-1 mt-2">
                     {correctWords.length > 0 ? (
                       correctWords.slice().reverse().map((word, index) => (
