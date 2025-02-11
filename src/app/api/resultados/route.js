@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
-export async function GET(req) {
+export async function GET() {
   try {
     const resultados = await prisma.resultado.findMany({
       include: {
@@ -13,7 +13,7 @@ export async function GET(req) {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
-  } catch (error) {
+  } catch () {
     return new Response(JSON.stringify({ error: "Error obteniendo los resultados" }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
