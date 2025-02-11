@@ -1,0 +1,37 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model word {
+  id       String  @id @unique  // ID basado en el pinyin con acentos y sin espacios
+  hanzi    String  // Caracteres chinos
+  pinyin   String  // Pinyin con acentos
+  meaning  String  // Significado en español (puede contener múltiples traducciones separadas por comas)
+  tipo     String  // Categoría de la palabra (Ej: "Estados de ánimo y sentimientos", "Comida y bebida")
+
+  resultados resultado[] // Relación inversa a los intentos en la tabla resultado
+}
+
+model resultado {
+  id          String   @id @default(uuid()) // ID único para cada respuesta
+  sesionId    String   // ID de sesión generado al inicio de un set de palabras
+  fecha       DateTime @default(now()) // Fecha y hora de la validación
+  palabraId   String   // ID de la palabra referenciada
+  palabra     word     @relation(fields: [palabraId], references: [id], onDelete: Cascade) // Relación con la tabla word
+  resultado   Boolean  // Si la respuesta fue correcta o no
+  audio       Boolean  // Si el usuario escuchó el audio
+  pinyin      Boolean  // Si el usuario pidió el pinyin
+}
+
+
