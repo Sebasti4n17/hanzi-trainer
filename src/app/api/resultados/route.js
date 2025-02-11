@@ -13,7 +13,7 @@ export async function GET() {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
-  } catch () {
+  } catch (error) {
     return new Response(JSON.stringify({ error: "Error obteniendo los resultados" }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
