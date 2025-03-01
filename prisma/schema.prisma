@@ -14,24 +14,29 @@ datasource db {
 }
 
 model word {
-  id       String  @id @unique  // ID basado en el pinyin con acentos y sin espacios
-  hanzi    String  // Caracteres chinos
-  pinyin   String  // Pinyin con acentos
-  meaning  String  // Significado en español (puede contener múltiples traducciones separadas por comas)
-  tipo     String  // Categoría de la palabra (Ej: "Estados de ánimo y sentimientos", "Comida y bebida")
+  id                   String   @id @unique  // ID based on pinyin with accents and no spaces
+  hanzi                String   // Chinese characters
+  pinyin               String   // Pinyin with accents
+  meaning              String   // Meaning in Spanish
+  category             String   // Word category (e.g., "emotions", "food_and_drink")
+  difficulty           Int      @default(2) // 1 = Easy, 2 = Medium, 3 = Hard
 
-  resultados resultado[] // Relación inversa a los intentos en la tabla resultado
+  results              result[] // Relationship with the result table
 }
 
-model resultado {
-  id          String   @id @default(uuid()) // ID único para cada respuesta
-  sesionId    String   // ID de sesión generado al inicio de un set de palabras
-  fecha       DateTime @default(now()) // Fecha y hora de la validación
-  palabraId   String   // ID de la palabra referenciada
-  palabra     word     @relation(fields: [palabraId], references: [id], onDelete: Cascade) // Relación con la tabla word
-  resultado   Boolean  // Si la respuesta fue correcta o no
-  audio       Boolean  // Si el usuario escuchó el audio
-  pinyin      Boolean  // Si el usuario pidió el pinyin
+model result {
+  id                   String   @id @default(uuid()) // Unique ID for the attempt
+  session_id           String   // Session ID
+  date                 DateTime @default(now()) // Date and time of validation
+  word_id              String   // ID of the referenced word
+  word                 word     @relation(fields: [word_id], references: [id], onDelete: Cascade)
+  is_correct           Boolean  // Whether the answer was correct
+  used_audio           Boolean  // Whether the user used audio help
+  used_pinyin          Boolean  // Whether the user used pinyin help
+  user_response        String?  // User's inputted response
+  error_count          Int      @default(0) // Number of times the user has failed this word
+  consecutive_correct  Int      @default(0) // Number of consecutive correct answers
 }
+
 
 

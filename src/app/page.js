@@ -22,11 +22,11 @@ export default function Home() {
   const [audioUsed, setAudioUsed] = useState(false);
 
   const generateSessionId = (words) => {
-    if (!words.length || !words[0]?.fullPinyin) {
+    if (!words.length || !words[0]?.full_pinyin) {
         console.log("⚠️ No se encontró pinyin, generando ID genérico");
         return `session-${Date.now()}`;
     }
-    const firstPinyin = words[0].fullPinyin
+    const firstPinyin = words[0].full_pinyin
     ?.replace(/\s+/g, "") // Elimina solo espacios
         ?.toLowerCase() || "default"; 
     const uniqueNumber = Date.now().toString().slice(-6); // Últimos 6 dígitos del timestamp
@@ -39,18 +39,43 @@ export default function Home() {
     fetchWords();
   }, []);
 
-  const fetchWords = () => {
-    fetch("/api/words")
-        .then((res) => res.json())
-        .then((data) => {
-            if (data.length > 0) {
-                const shuffledWords = data.sort(() => Math.random() - 0.5);
-                setWords(shuffledWords);
-                setCurrentWordIndex(0);
-                setSessionId(generateSessionId(shuffledWords)); // Generar y almacenar el nuevo ID de sesión
-            }
-        })
-        .catch((err) => console.error("Error al obtener palabras:", err));
+  const shuffleArray = (array) => {
+    let shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+};
+
+const fetchWords = () => {
+  fetch("/api/words")
+      .then((res) => {
+          if (!res.ok) {
+              console.warn(`⚠️ HTTP error! Status: ${res.status}`);
+              return null;
+          }
+          return res.json();
+      })
+      .then((data) => {
+          if (!data || !Array.isArray(data) || data.length === 0) {
+              console.warn("⚠️ No hay palabras disponibles en la base de datos.");
+              return;
+          }
+
+          try {
+              const filteredWords = data.filter(word => !word.learned);
+              const shuffledWords = shuffleArray(filteredWords);
+              setWords(shuffledWords);
+              setCurrentWordIndex(0);
+              setSessionId(generateSessionId(shuffledWords));
+          } catch (error) {
+              console.error("🔥 Error al procesar palabras:", error);
+          }
+      })
+      .catch((err) => {
+          console.error("🔥 Error al obtener palabras:", err);
+      });
 };
 
   const normalizeText = (text) => {
@@ -66,27 +91,37 @@ export default function Home() {
   const checkAnswer = () => {
     const userAnswer = normalizeText(input);
     const currentWord = words[currentWordIndex];
-  
+    const userInput = input.trim();
+
     const correctAnswers = Array.isArray(currentWord?.meaning)
-      ? currentWord.meaning.map(normalizeText)
-      : [normalizeText(currentWord?.meaning)];
-  
+        ? currentWord.meaning.map(normalizeText)
+        : [normalizeText(currentWord?.meaning)];
+
     const isMatch = correctAnswers.some(correct => levenshtein.get(userAnswer, correct) <= 1);
-  
+
     if (isMatch) {
-      setFeedback("✅ Correcto!");
-      setCorrectCount(correctCount + 1);
-      setShowCorrectAnswer(true);
-      setIsCorrect(true);
-      setCorrectWords([...correctWords, currentWord.hanzi]);
+        setFeedback("✅ Correcto!");
+        setCorrectCount(prev => prev + 1);
+        setShowCorrectAnswer(true);
+        setIsCorrect(true);
+        setCorrectWords(prev => [currentWord.hanzi, ...prev]);
     } else {
-      setFeedback("❌ Incorrecto.");
-      setIncorrectCount(incorrectCount + 1);
-      setShowCorrectAnswer(true);
-      setIsCorrect(false);
-      setIncorrectWords([...incorrectWords, currentWord.hanzi]);
+        setFeedback("❌ Incorrecto.");
+        setIncorrectCount(prev => prev + 1);
+        setShowCorrectAnswer(true);
+        setIsCorrect(false);
+        setIncorrectWords(prev => [currentWord.hanzi, ...prev]);
+
+        // 📌 Si era una palabra aprendida, se vuelve a poner en rotación
+        if (currentWord.learned) {
+            fetch("/api/words/unlearn", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ word_id: currentWord.id }),
+            }).catch(err => console.error("Error al marcar palabra como no aprendida:", err));
+        }
     }
-  
+
     // 🔊 Reproducir audio al responder
     const cleanHanzi = currentWord.hanzi.replace(/[\s！？]/g, "").trim();
     const audioFile = `/audio/${cleanHanzi}.mp3`;
@@ -94,36 +129,36 @@ export default function Home() {
     audio.onerror = () => console.warn("Error al cargar el audio:", audioFile);
     audio.play();
   
-    // 📌 Guardar el intento en la base de datos
+    // 📌 Guardar el intento en la base de datos antes de reiniciar estados
     fetch("/api/resultados", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        sesionId: sessionId,
-        palabraId: currentWord.id,
-        resultado: isMatch,
-        audio: audioUsed,  // Ahora sí registra si se usó el audio
-        pinyin: showPinyin,  
-      }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            sessionId: sessionId,
+            word_id: currentWord.id,
+            is_correct: isMatch,
+            audio_used: audioUsed,
+            pinyin_used: showPinyin,
+            user_response: userInput,
+        }),
     }).catch((err) => console.error("Error al guardar resultado:", err));
-  
-    // 🔄 Resetear estados
+
+    // 🔄 Resetear estados después de un tiempo
     setTimeout(() => {
-      if (currentWordIndex + 1 < words.length) {
-        setCurrentWordIndex(currentWordIndex + 1);
-      } else {
-        fetchWords();
-      }
-      setInput("");
-      setFeedback(null);
-      setShowPinyin(false);
-      setShowCorrectAnswer(false);
-      setIsCorrect(null);
-      setAudioUsed(false); // 🔹 Resetear el estado de audio
+        if (currentWordIndex + 1 < words.length) {
+            setCurrentWordIndex(prev => prev + 1);
+        } else {
+            fetchWords();
+        }
+        setInput(""); 
+        setFeedback(null);
+        setShowPinyin(false);
+        setShowCorrectAnswer(false);
+        setIsCorrect(null);
+        setAudioUsed(false); 
     }, 1500);
-  };
+};
+
   
   const revealPinyin = () => {
     setShowPinyin(true);
@@ -160,7 +195,7 @@ export default function Home() {
           <Card className={`p-6 w-full max-w-md text-center shadow-lg rounded-lg border ${isCorrect === true ? "bg-green-100 border-green-300" : isCorrect === false ? "bg-red-100 border-red-300" : "bg-blue-50 border-blue-200"}`}>
             <CardContent>
               <h1 className="text-4xl font-bold mb-2 text-blue-600">{words[currentWordIndex].hanzi}</h1>
-              {showPinyin && <p className="text-lg text-gray-600 font-semibold">{words[currentWordIndex].fullPinyin}</p>}
+              {showPinyin && <p className="text-lg text-gray-600 font-semibold">{words[currentWordIndex].full_pinyin}</p>}
               <div className="flex justify-center space-x-4 mt-4">
                 <Button className="bg-blue-500 text-white hover:bg-blue-700" onClick={playAudio}>🔊 Escuchar</Button>
                 <Button className="bg-gray-500 text-white hover:bg-gray-700" onClick={revealPinyin}>👀 Pinyin</Button>
@@ -180,7 +215,7 @@ export default function Home() {
 
               <Button className="mt-4 w-full bg-green-500 text-white hover:bg-green-700" onClick={checkAnswer}>Verificar</Button>
               {showCorrectAnswer && (
-                <p className={`mt-2 text-lg font-semibold ${isCorrect ? "text-green-700" : "text-red-700"}`}>🔹 Pinyin: {words[currentWordIndex].fullPinyin} | 🔹 Significado: {words[currentWordIndex].meaning}</p>
+                <p className={`mt-2 text-lg font-semibold ${isCorrect ? "text-green-700" : "text-red-700"}`}>{feedback} |🔹 Pinyin: {words[currentWordIndex].full_pinyin} | 🔹 Significado: {words[currentWordIndex].all_meanings}</p>
               )}
             </CardContent>
           </Card>
@@ -193,9 +228,9 @@ export default function Home() {
                   <h4 className="text-lg font-semibold text-green-600 text-center">✅ Correctas</h4>
                   <div className="flex flex-col items-center space-y-1 mt-2">
                     {correctWords.length > 0 ? (
-                      correctWords.slice().reverse().map((word, index) => (
+                      correctWords.slice().map((word, index) => (
                         <span key={index} className="px-3 py-1 bg-green-200 text-green-800 rounded-md text-sm text-center">
-                          {`${word}/${words.find(w => w.hanzi === word)?.fullPinyin || "?"}/${words.find(w => w.hanzi === word)?.meaning || "?"}`}
+                          {`${word}/${words.find(w => w.hanzi === word)?.full_pinyin || "?"}/${words.find(w => w.hanzi === word)?.all_meanings || "?"}`}
                         </span>
                       ))
                     ) : (
@@ -209,9 +244,9 @@ export default function Home() {
                   <h4 className="text-lg font-semibold text-red-600 text-center">❌ Incorrectas</h4>
                   <div className="flex flex-col items-center space-y-1 mt-2">
                     {incorrectWords.length > 0 ? (
-                      incorrectWords.slice().reverse().map((word, index) => (
+                      incorrectWords.slice().map((word, index) => (
                         <span key={index} className="px-3 py-1 bg-red-200 text-red-800 rounded-md text-sm text-center">
-                          {`${word}/${words.find(w => w.hanzi === word)?.fullPinyin || "?"}/${words.find(w => w.hanzi === word)?.meaning || "?"}`}
+                          {`${word}/${words.find(w => w.hanzi === word)?.full_pinyin || "?"}/${words.find(w => w.hanzi === word)?.all_meanings || "?"}`}
                         </span>
                       ))
                     ) : (
